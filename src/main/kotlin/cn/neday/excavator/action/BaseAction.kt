@@ -10,7 +10,7 @@ import com.intellij.openapi.project.Project
 
 abstract class BaseAnAction : AnAction() {
 
-    private var project: Project? = null;
+    private var project: Project? = null
 
     override fun update(event: AnActionEvent) {
         project = event.getData(PlatformDataKeys.PROJECT)
@@ -25,12 +25,12 @@ abstract class BaseAnAction : AnAction() {
     protected fun showInfo(message: String) {
         NotificationGroupManager.getInstance().getNotificationGroup("Flutter ToolKit Notification")
             .createNotification(message, NotificationType.INFORMATION)
-            .notify(project);
+            .notify(project)
     }
 
     protected fun showErrorMessage(message: String) {
         NotificationGroupManager.getInstance().getNotificationGroup("Flutter ToolKit Notification")
             .createNotification(message, NotificationType.ERROR)
-            .notify(project);
+            .notify(project)
     }
 }

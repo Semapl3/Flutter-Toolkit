@@ -8,12 +8,16 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.PerformInBackgroundOption
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.psi.PsiDocumentManager
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
@@ -87,42 +91,51 @@ abstract class BaseGenerationAnAction : BaseAnAction() {
         val jScrollPane = toolWindow?.contentManager?.getContent(0)?.component?.getComponent(0) as? JScrollPane?
         val verticalBar: JScrollBar? = jScrollPane?.verticalScrollBar
         val jTextArea = jScrollPane?.viewport?.getComponent(0) as? JTextArea?
-        project.asyncTask(title = title, runAction = {
-            val fillCmd = "$flutterPath $cmd"
-            log(jTextArea, verticalBar, "\$ $fillCmd")
-            val process = Runtime.getRuntime().exec(fillCmd, null, File(dirPath))
-            val bufferedErrorStream = BufferedInputStream(process.errorStream)
-            val bufferedInputStream = BufferedInputStream(process.inputStream)
-            val bufferedErrorReader = BufferedReader(InputStreamReader(bufferedErrorStream, "GBK"))
-            val bufferedInputReader = BufferedReader(InputStreamReader(bufferedInputStream, "GBK"))
-            var lineStr: String?
-            while (bufferedInputReader.readLine().also { lineStr = it } != null) {
-                log(jTextArea, verticalBar, lineStr)
+
+        val currentDoc = FileEditorManager.getInstance(project).getSelectedTextEditor()?.getDocument()
+        if (currentDoc != null) {
+            val currentFile = FileDocumentManager.getInstance().getFile(currentDoc)
+            val fileName = currentFile?.canonicalPath;
+
+            if (fileName != null) {
+                project.asyncTask(title = title, runAction = {
+                    val fillCmd = "$flutterPath packages pub run build_runner build --build-filter='$fileName'"
+                    log(jTextArea, verticalBar, "\$ $fillCmd")
+                    val process = Runtime.getRuntime().exec(fillCmd, null, File(dirPath))
+                    val bufferedErrorStream = BufferedInputStream(process.errorStream)
+                    val bufferedInputStream = BufferedInputStream(process.inputStream)
+                    val bufferedErrorReader = BufferedReader(InputStreamReader(bufferedErrorStream, "GBK"))
+                    val bufferedInputReader = BufferedReader(InputStreamReader(bufferedInputStream, "GBK"))
+                    var lineStr: String?
+                    while (bufferedInputReader.readLine().also { lineStr = it } != null) {
+                        log(jTextArea, verticalBar, lineStr)
+                    }
+                    while (bufferedErrorReader.readLine().also { lineStr = it } != null) {
+                        log(jTextArea, verticalBar, lineStr)
+                    }
+                    val exitVal = process.waitFor()
+                    bufferedErrorReader.close()
+                    bufferedInputReader.close()
+                    bufferedErrorStream.close()
+                    bufferedInputStream.close()
+                    isBuildRunnerSuccess = if (exitVal == 0) {
+                        log(jTextArea, verticalBar, "build_runner Success! Exit with code: $exitVal")
+                        true
+                    } else {
+                        log(jTextArea, verticalBar, "build_runner Error! Exit with code: $exitVal")
+                        false
+                    }
+                }, successAction = {
+                    if (isBuildRunnerSuccess) {
+                        showInfo(successMessage)
+                    } else {
+                        showErrorMessage("An exception error occurred during build_runner execution. Please manually execute and resolve the error before using this plugin.")
+                    }
+                }, failAction = {
+                    showErrorMessage(errorMessage + ", message:" + it.localizedMessage)
+                })
             }
-            while (bufferedErrorReader.readLine().also { lineStr = it } != null) {
-                log(jTextArea, verticalBar, lineStr)
-            }
-            val exitVal = process.waitFor()
-            bufferedErrorReader.close()
-            bufferedInputReader.close()
-            bufferedErrorStream.close()
-            bufferedInputStream.close()
-            isBuildRunnerSuccess = if (exitVal == 0) {
-                log(jTextArea, verticalBar, "build_runner Success! Exit with code: $exitVal")
-                true
-            } else {
-                log(jTextArea, verticalBar, "build_runner Error! Exit with code: $exitVal")
-                false
-            }
-        }, successAction = {
-            if (isBuildRunnerSuccess) {
-                showInfo(successMessage)
-            } else {
-                showErrorMessage("An exception error occurred during build_runner execution. Please manually execute and resolve the error before using this plugin.")
-            }
-        }, failAction = {
-            showErrorMessage(errorMessage + ", message:" + it.localizedMessage)
-        })
+        }
     }
 
     private fun log(jTextArea: JTextArea?, verticalBar: JScrollBar?, message: String?) {
