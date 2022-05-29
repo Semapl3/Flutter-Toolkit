@@ -14,10 +14,8 @@ import com.intellij.openapi.progress.PerformInBackgroundOption
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
-import com.intellij.psi.PsiDocumentManager
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
@@ -25,7 +23,6 @@ import java.io.InputStreamReader
 import javax.swing.JScrollBar
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
-
 
 abstract class BaseGenerationAnAction : BaseAnAction() {
     abstract val cmd: String
@@ -95,9 +92,10 @@ abstract class BaseGenerationAnAction : BaseAnAction() {
         val currentDoc = FileEditorManager.getInstance(project).getSelectedTextEditor()?.getDocument()
         if (currentDoc != null) {
             val currentFile = FileDocumentManager.getInstance().getFile(currentDoc)
-            val fileName = currentFile?.canonicalPath;
+            var fileName = currentFile?.canonicalPath;
 
             if (fileName != null) {
+                fileName = customReplaceAll(fileName, ".dart", "**");
                 project.asyncTask(title = title, runAction = {
                     val fillCmd = "$flutterPath packages pub run build_runner build --build-filter='$fileName'"
                     log(jTextArea, verticalBar, "\$ $fillCmd")
@@ -177,4 +175,27 @@ private fun Project.asyncTask(
             finishAction?.invoke()
         }
     }.queue()
+}
+
+fun customReplaceAll(str: String, oldStr: String, newStr: String?): String {
+    var newStr = newStr
+    if ("" == str || "" == oldStr || oldStr == newStr) {
+        return str
+    }
+    if (newStr == null) {
+        newStr = ""
+    }
+    val strLength = str.length
+    val oldStrLength = oldStr.length
+    var builder = StringBuilder(str)
+    for (i in 0 until strLength) {
+        val index = builder.indexOf(oldStr, i)
+        if (index == -1) {
+            return if (i == 0) {
+                str
+            } else builder.toString()
+        }
+        builder = builder.replace(index, index + oldStrLength, newStr)
+    }
+    return builder.toString()
 }
